@@ -1,0 +1,49 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:reportdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: 
+    initialization-mode: always
+  http:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+  h2:
+    console:
+      enabled: true
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+server:
+  port: 8080
+
+security:
+  jwt:
+    # NOTE: replace this secret in real environments
+    secret: change-me-to-a-longer-jwt-secret-key-1234567890
+    # 24 hours in milliseconds
+    expiration: 86400000
+
+report:
+  templates:
+    # Base directory for Excel report templates under classpath resources
+    base-path: classpath:report-templates
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when_authorized
+
+logging:
+  file:
+    name: backend/logs/report-app.log
+  level:
+    root: INFO
