@@ -24,6 +24,7 @@ public class UserInitializer {
             user.setUsername("admin");
             user.setPassword(passwordEncoder.encode("123456"));
             user.setRole("MAKER,CHECKER");
+            user.setReportAccessScope("*");
             userRepository.save(user);
         }
 
@@ -32,6 +33,7 @@ public class UserInitializer {
             maker.setUsername("maker1");
             maker.setPassword(passwordEncoder.encode("123456"));
             maker.setRole("MAKER");
+            maker.setReportAccessScope("1,2,3,4,5,6");
             userRepository.save(maker);
         }
 
@@ -40,6 +42,7 @@ public class UserInitializer {
             checker.setUsername("checker1");
             checker.setPassword(passwordEncoder.encode("123456"));
             checker.setRole("CHECKER");
+            checker.setReportAccessScope("1,2,3,4,5,6");
             userRepository.save(checker);
         }
     }

@@ -20,6 +20,8 @@ public class User {
 
     private String role;
 
+    private String reportAccessScope;
+
     public Long getId() {
         return id;
     }
@@ -50,5 +52,13 @@ public class User {
 
     public void setRole(String role) {
         this.role = role;
+    }
+
+    public String getReportAccessScope() {
+        return reportAccessScope;
+    }
+
+    public void setReportAccessScope(String reportAccessScope) {
+        this.reportAccessScope = reportAccessScope;
     }
 }

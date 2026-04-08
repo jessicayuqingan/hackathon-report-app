@@ -57,18 +57,32 @@ public class ReportRunController {
     }
 
     @GetMapping("/my-runs")
-    public List<ReportRun> getMyRuns() {
-        return reportRunService.getRunsForCurrentMaker();
+    public Map<String, Object> getMyRuns(@RequestParam(value = "status", required = false) String status,
+                                         @RequestParam(value = "reportName", required = false) String reportName,
+                                         @RequestParam(value = "page", defaultValue = "0") int page,
+                                         @RequestParam(value = "size", defaultValue = "10") int size) {
+        return reportRunService.getRunsForCurrentMaker(status, reportName, page, size);
     }
 
     @GetMapping("/submitted")
-    public List<ReportRun> getSubmitted() {
-        return reportRunService.getSubmittedRunsForChecker();
+    public Map<String, Object> getSubmitted(@RequestParam(value = "reportName", required = false) String reportName,
+                                            @RequestParam(value = "makerUsername", required = false) String makerUsername,
+                                            @RequestParam(value = "page", defaultValue = "0") int page,
+                                            @RequestParam(value = "size", defaultValue = "10") int size) {
+        return reportRunService.getSubmittedRunsForChecker(reportName, makerUsername, page, size);
     }
 
     @GetMapping("/checker/history")
-    public List<ReportRun> getCheckerHistory() {
-        return reportRunService.getHistoryRunsForCurrentChecker();
+    public Map<String, Object> getCheckerHistory(@RequestParam(value = "status", required = false) String status,
+                                                 @RequestParam(value = "reportName", required = false) String reportName,
+                                                 @RequestParam(value = "page", defaultValue = "0") int page,
+                                                 @RequestParam(value = "size", defaultValue = "10") int size) {
+        return reportRunService.getHistoryRunsForCurrentChecker(status, reportName, page, size);
+    }
+
+    @GetMapping("/notifications/summary")
+    public Map<String, Object> getNotificationSummary() {
+        return reportRunService.getNotificationSummaryForCurrentUser();
     }
 
     @GetMapping("/{id}/audit")

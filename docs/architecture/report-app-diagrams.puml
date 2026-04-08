@@ -1,0 +1,209 @@
+@startuml ReportAppArchitecture
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam ArrowColor #4B5563
+skinparam DefaultFontName Arial
+skinparam componentStyle rectangle
+skinparam linetype ortho
+
+title Report App - Architecture and Data Flow
+
+actor User
+actor Maker
+actor Checker
+User <|-- Maker
+User <|-- Checker
+
+rectangle "Frontend (Angular)" as FE {
+  component "AuthService" as FEAuth
+  component "ReportService" as FEReport
+  component "AuthInterceptor" as FEInterceptor
+  component "ReportViewerComponent" as FEViewer
+  component "ReportRunFlowComponent" as FEFlow
+}
+
+rectangle "Backend (Spring Boot)" as BE {
+  component "AuthController" as AuthController
+  component "ReportController" as ReportController
+  component "ReportRunController" as ReportRunController
+  component "AuthService" as AuthService
+  component "CurrentUserService" as CurrentUserService
+  component "ReportService" as ReportService
+  component "ReportRunService" as ReportRunService
+  component "AuditService" as AuditService
+  component "ReportExcelExportService" as ExportService
+  component "ReportDao" as ReportDao
+  component "UserRepository" as UserRepository
+  component "ReportRunRepository" as ReportRunRepository
+  component "ReportAuditEventRepository" as ReportAuditEventRepository
+  component "SecurityConfig + JWT Filter" as SecurityLayer
+}
+
+database "H2 Database" as DB
+folder "Excel Templates\nreport-templates/" as Templates
+
+rectangle "Logical Tables / Entities" as MODEL {
+  entity "users" as UsersTable
+  entity "report_config" as ReportConfigTable
+  entity "report_run" as ReportRunTable
+  entity "report_audit_event" as AuditEventTable
+}
+
+Maker --> FEViewer : Login / Execute / Submit / Export
+Checker --> FEViewer : Login / Review / Decide / Export
+Checker --> FEFlow : View audit timeline
+
+FEViewer --> FEAuth : login()
+FEViewer --> FEReport : load/execute/submit/decide/export
+FEFlow --> FEReport : getAuditTrail()
+FEReport --> FEInterceptor : attach JWT
+FEAuth --> FEInterceptor : JWT in localStorage
+
+FEAuth --> AuthController : POST /api/auth/login
+AuthController --> AuthService : login()
+AuthService --> UserRepository : findByUsername()
+UserRepository --> DB
+
+FEReport --> SecurityLayer : Authorized API requests
+SecurityLayer --> ReportController
+SecurityLayer --> ReportRunController
+SecurityLayer --> AuthController
+
+ReportController --> ReportService : getReports/getReport/run/generate
+ReportController --> ReportRunService : executeReportWithRun()
+ReportController --> ExportService : exportLatestByReportId()
+
+ReportRunController --> ReportRunService : submit/decide/query/audit
+ReportRunController --> ExportService : exportByRunId()
+
+ReportRunService --> CurrentUserService : getCurrentUserOrThrow()
+CurrentUserService --> UserRepository
+
+ReportService --> ReportDao : findAll/findById/executeSql/save
+ReportDao --> DB
+
+ReportRunService --> ReportService : load + run report SQL
+ReportRunService --> ReportRunRepository : save/find
+ReportRunService --> AuditService : recordEvent()
+ReportRunService --> ReportAuditEventRepository : query audit trail
+ReportRunRepository --> DB
+ReportAuditEventRepository --> DB
+
+ExportService --> CurrentUserService : getCurrentUserOrThrow()
+ExportService --> ReportService : load/re-execute report
+ExportService --> ReportRunRepository : load run snapshot
+ExportService --> AuditService : record export event
+ExportService --> Templates : read template
+
+DB --> UsersTable
+DB --> ReportConfigTable
+DB --> ReportRunTable
+DB --> AuditEventTable
+
+ReportConfigTable ||--o{ ReportRunTable : generates
+ReportRunTable ||--o{ AuditEventTable : produces
+UsersTable ||--o{ ReportRunTable : maker/checker
+UsersTable ||--o{ AuditEventTable : actor
+ReportConfigTable ||--o{ AuditEventTable : referenced by
+
+note right of ReportService
+Executes report SQL and returns row data.
+This is the highest-risk layer because raw SQL is run directly.
+end note
+
+note right of ReportRunService
+Owns workflow state transitions:
+Generated -> Submitted -> Approved/Rejected
+Also stores result snapshots and writes audit events.
+end note
+
+@enduml
+
+@startuml ReportExecutionSequence
+skinparam shadowing false
+skinparam DefaultFontName Arial
+skinparam ArrowColor #4B5563
+
+title Report Execution and Approval Sequence
+
+actor Maker
+actor Checker
+participant "Angular UI" as UI
+participant "AuthInterceptor" as Interceptor
+participant "Security + JWT" as Security
+participant "ReportController" as RC
+participant "ReportRunController" as RRC
+participant "ReportRunService" as RRS
+participant "ReportService" as RS
+participant "ReportDao" as DAO
+participant "ReportRunRepository" as RunRepo
+participant "AuditService" as AS
+participant "AuditEventRepository" as AuditRepo
+database "H2 DB" as DB
+
+Maker -> UI : Login
+UI -> Security : POST /api/auth/login
+Security -> UI : JWT + user
+
+Maker -> UI : Execute report
+UI -> Interceptor : add Authorization header
+Interceptor -> Security : POST /api/reports/{id}/execute
+Security -> RC : authenticated request
+RC -> RRS : executeReportWithRun(id)
+RRS -> RS : getReportById(id)
+RS -> DAO : findById(id)
+DAO -> DB : read report_config
+DB --> DAO : report definition
+DAO --> RS : Report
+RS --> RRS : Report
+RRS -> RS : runReport(report.sql)
+RS -> DAO : executeSql(sql)
+DAO -> DB : execute SQL
+DB --> DAO : result rows
+DAO --> RS : List<Map>
+RS --> RRS : result rows
+RRS -> RunRepo : save ReportRun(status=Generated, snapshot)
+RunRepo -> DB : insert report_run
+RRS -> AS : recordEvent(Generated)
+AS -> AuditRepo : save
+AuditRepo -> DB : insert report_audit_event
+RRS --> RC : result rows
+RC --> UI : result rows
+
+Maker -> UI : Submit run
+UI -> Interceptor : add Authorization header
+Interceptor -> Security : POST /api/report-runs/{id}/submit
+Security -> RRC : authenticated request
+RRC -> RRS : submitRun(id)
+RRS -> RunRepo : load/save status=Submitted
+RunRepo -> DB : update report_run
+RRS -> AS : recordEvent(Submitted)
+AS -> AuditRepo : save
+AuditRepo -> DB : insert report_audit_event
+RRC --> UI : success
+
+Checker -> UI : Decide run
+UI -> Interceptor : add Authorization header
+Interceptor -> Security : POST /api/report-runs/{id}/decision
+Security -> RRC : authenticated request
+RRC -> RRS : decideRun(id, approve/reject, comment)
+RRS -> RunRepo : load/save decision
+RunRepo -> DB : update report_run
+RRS -> AS : recordEvent(Approved/Rejected)
+AS -> AuditRepo : save
+AuditRepo -> DB : insert report_audit_event
+RRC --> UI : success
+
+Checker -> UI : View audit timeline
+UI -> Interceptor : add Authorization header
+Interceptor -> Security : GET /api/report-runs/{id}/audit
+Security -> RRC : authenticated request
+RRC -> RRS : getAuditEventsForRun(id)
+RRS -> AuditRepo : findByReportRunIdOrderByEventTimeAsc(id)
+AuditRepo -> DB : query report_audit_event
+DB --> AuditRepo : events
+AuditRepo --> RRS : events
+RRS --> RRC : events
+RRC --> UI : events
+
+@enduml

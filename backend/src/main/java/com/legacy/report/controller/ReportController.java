@@ -64,15 +64,17 @@ public class ReportController {
     
     // 直接暴露SQL执行接口，这是严重的安全问题
     @PostMapping("/reports/run")
-    public List<Map<String, Object>> runReport(@RequestBody Map<String, String> request) {
-        String sql = request.get("sql");
-        return reportService.runReport(sql);
+    public Map<String, Object> runReport(@RequestBody Map<String, String> request) {
+        throw new RuntimeException("已禁用任意 SQL 执行接口，请使用保存的报表定义与参数化执行接口");
     }
     
     @PostMapping("/reports/generate")
     public Map<String, Object> generateReport(@RequestBody Map<String, Object> request) {
         Long reportId = Long.valueOf(request.get("reportId").toString());
-        String params = (String) request.get("params");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> params = request.get("params") instanceof Map
+                ? (Map<String, Object>) request.get("params")
+                : Map.of();
         return reportService.generateReport(reportId, params);
     }
     
@@ -82,10 +84,13 @@ public class ReportController {
     }
     
     @PostMapping("/reports/{id}/execute")
-    public List<Map<String, Object>> executeReport(@PathVariable Long id) {
+    public List<Map<String, Object>> executeReport(@PathVariable Long id, @RequestBody(required = false) Map<String, Object> request) {
         // 通过 ReportRunService 执行报表并创建 ReportRun + 审计事件，
         // 对前端返回值保持不变：仍然返回查询结果列表。
-        return reportRunService.executeReportWithRun(id);
+        Map<String, Object> parameters = request == null || !(request.get("params") instanceof Map)
+                ? Map.of()
+                : (Map<String, Object>) request.get("params");
+        return reportRunService.executeReportWithRun(id, parameters);
     }
     
     @GetMapping("/reports/{id}/export")

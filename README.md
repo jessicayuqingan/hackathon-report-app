@@ -2,6 +2,16 @@
 
 ---
 
+## Generated Documentation Artifacts
+
+The following architecture documentation assets have been added for Topic 3 documentation work:
+
+- `docs/architecture/report-app-architecture.md` - detailed architecture and data flow document
+- `docs/architecture/report-app-diagrams.puml` - PlantUML architecture and sequence diagrams
+- `docs/architecture/report-app-diagram.drawio` - editable draw.io architecture diagram
+- `docs/architecture/report-app-presentation-summary.md` - slide-ready executive summary
+- `docs/architecture/report-app-slide-diagram.puml` - simplified presentation diagram
+
 ## Overview
 
 This document outlines the five project topics available for this hackathon. Each topic focuses on real-world engineering challenges, with an emphasis on practical impact, code quality, and demonstrable results.

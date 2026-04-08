@@ -8,6 +8,9 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class CurrentUserService {
@@ -38,6 +41,32 @@ public class CurrentUserService {
     public void requireRole(User user, String requiredRole) {
         if (!hasRole(user, requiredRole)) {
             throw new RuntimeException("当前用户没有所需角色: " + requiredRole);
+        }
+    }
+
+    public Set<Long> getAllowedReportIds(User user) {
+        if (user == null || user.getReportAccessScope() == null || user.getReportAccessScope().isBlank()) {
+            return Collections.emptySet();
+        }
+        String scope = user.getReportAccessScope().trim();
+        if ("*".equals(scope)) {
+            return Collections.emptySet();
+        }
+        return Arrays.stream(scope.split(","))
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .map(Long::valueOf)
+                .collect(Collectors.toSet());
+    }
+
+    public boolean hasReportAccess(User user, Long reportId) {
+        Set<Long> allowedReportIds = getAllowedReportIds(user);
+        return allowedReportIds.isEmpty() || allowedReportIds.contains(reportId);
+    }
+
+    public void requireReportAccess(User user, Long reportId) {
+        if (!hasReportAccess(user, reportId)) {
+            throw new RuntimeException("当前用户无权访问该报表: " + reportId);
         }
     }
 }

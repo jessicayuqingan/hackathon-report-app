@@ -1,0 +1,74 @@
+@startuml ReportAppSlideDiagram
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam ArrowColor #4B5563
+skinparam DefaultFontName Arial
+skinparam componentStyle rectangle
+skinparam linetype ortho
+skinparam backgroundColor white
+
+title Report App - Presentation Diagram
+
+actor Maker
+actor Checker
+
+rectangle "Frontend\nAngular SPA" as FE #D5E8D4 {
+  component "Login + Report UI" as UI
+  component "JWT Interceptor" as JWT
+}
+
+rectangle "Backend\nSpring Boot API" as BE #FFF2CC {
+  component "Auth APIs" as Auth
+  component "Report APIs" as ReportApi
+  component "Workflow Service\nReportRunService" as Workflow
+  component "Audit Service" as Audit
+  component "Excel Export Service" as Export
+}
+
+database "H2 Database" as DB #F8CECC
+folder "Excel Templates" as TPL #E1D5E7
+
+rectangle "Core Business Records" as DOMAIN #FFFFFF {
+  entity "Report" as Report
+  entity "ReportRun" as ReportRun
+  entity "ReportAuditEvent" as AuditEvent
+  entity "User" as User
+}
+
+Maker --> UI : login / execute / submit
+Checker --> UI : login / review / decide
+UI --> JWT : attach token
+JWT --> Auth : POST /auth/login
+JWT --> ReportApi : authenticated API calls
+
+ReportApi --> Workflow : execute / submit / decide / query
+Workflow --> Audit : record events
+Workflow --> DB : read/write runs
+Auth --> DB : read users
+ReportApi --> DB : read report definitions
+Export --> DB : read snapshot / report data
+Export --> TPL : render xlsx
+
+DB --> User
+DB --> Report
+DB --> ReportRun
+DB --> AuditEvent
+
+Report --> ReportRun : one-to-many
+ReportRun --> AuditEvent : one-to-many
+User --> ReportRun : maker/checker
+User --> AuditEvent : actor
+
+note right of Workflow
+Business heart of the system:
+- enforces maker-checker workflow
+- stores run snapshots
+- manages status transitions
+end note
+
+note bottom of ReportApi
+Main architectural risk:
+report SQL is executed directly.
+end note
+
+@enduml

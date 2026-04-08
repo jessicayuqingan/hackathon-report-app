@@ -6,6 +6,7 @@
     <h2>登录</h2>
     <div *ngIf="authService.isLoggedIn(); else loginForm">
       <p>当前用户：{{ authService.getCurrentUser()?.username }}</p>
+      <p>当前角色：{{ authService.getCurrentUser()?.role }}</p>
       <button (click)="logout()">退出登录</button>
     </div>
     <ng-template #loginForm>
@@ -32,7 +33,11 @@
         {{ getChineseReportName(r.name) }}
       </option>
     </select>
-    
+    <label>
+      执行参数 JSON：
+      <textarea [(ngModel)]="reportParametersText" rows="5" placeholder='例如：{"customer_id": 1}'></textarea>
+    </label>
+    <div *ngIf="parameterError" class="error">{{ parameterError }}</div>
     <button (click)="runReport()">执行报表</button>
     <button (click)="exportReport()" [disabled]="!selectedReport">下载报表 Excel</button>
   </div>
@@ -45,11 +50,12 @@
       ｜ 状态：{{ currentRun.status }}
       ｜ 生成时间：{{ currentRun.generatedAt | date:'yyyy-MM-dd HH:mm:ss' }}
     </p>
+    <pre class="parameter-preview">参数：{{ formatParameters(currentRun.parametersJson) }}</pre>
     <p *ngIf="currentRun.submittedAt">提交时间：{{ currentRun.submittedAt | date:'yyyy-MM-dd HH:mm:ss' }}</p>
     <p *ngIf="currentRun.decidedAt">审批时间：{{ currentRun.decidedAt | date:'yyyy-MM-dd HH:mm:ss' }}</p>
 
-    <button *ngIf="currentRun.status === 'Generated'" (click)="submitCurrentRun()">
-      提交审批
+    <button *ngIf="currentRun.status === 'Generated' || currentRun.status === 'Rejected'" (click)="submitCurrentRun()">
+      {{ currentRun.status === 'Rejected' ? '重新提交审批' : '提交审批' }}
     </button>
     <button (click)="exportCurrentRun()">下载本次运行 Excel</button>
     <div *ngIf="submitMessage" class="info">{{ submitMessage }}</div>
@@ -89,6 +95,22 @@
   <!-- Maker 视角：我的提交历史 -->
   <div class="section" *ngIf="authService.getCurrentUser()?.role?.includes('MAKER')">
     <h2>我的提交历史</h2>
+    <div class="filter-row">
+      <label>
+        状态
+        <select [(ngModel)]="makerRunStatusFilter">
+          <option value="">全部</option>
+          <option value="Generated">Generated</option>
+          <option value="Submitted">Submitted</option>
+          <option value="Approved">Approved</option>
+          <option value="Rejected">Rejected</option>
+        </select>
+      </label>
+      <label>
+        报表名
+        <input [(ngModel)]="makerRunReportNameFilter" />
+      </label>
+    </div>
     <button (click)="loadMakerRuns()">刷新</button>
     <div *ngIf="makerRunsError" class="error">{{ makerRunsError }}</div>
 
@@ -102,6 +124,7 @@
           <th>运行ID</th>
           <th>报表</th>
           <th>状态</th>
+          <th>参数</th>
           <th>生成时间</th>
           <th>提交时间</th>
           <th>审批时间</th>
@@ -113,56 +136,38 @@
           <td>#{{ r.id }}</td>
           <td>{{ r.reportName }}</td>
           <td>{{ r.status }}</td>
+          <td><pre class="parameter-preview compact">{{ formatParameters(r.parametersJson) }}</pre></td>
           <td>{{ r.generatedAt | date:'yyyy-MM-dd HH:mm:ss' }}</td>
           <td>{{ r.submittedAt ? (r.submittedAt | date:'yyyy-MM-dd HH:mm:ss') : '-' }}</td>
           <td>{{ r.decidedAt ? (r.decidedAt | date:'yyyy-MM-dd HH:mm:ss') : '-' }}</td>
           <td>
             <button *ngIf="r.status === 'Approved'" (click)="exportRun(r)">下载 Excel</button>
+            <button *ngIf="r.status === 'Rejected'" (click)="submitCurrentRun()" [disabled]="currentRun?.id !== r.id">重新提交</button>
             <button (click)="viewRunFlow(r.id)">查看流程</button>
           </td>
         </tr>
       </tbody>
     </table>
-  </div>
-  
-  <div *ngIf="loading">加载中...</div>
-  
-  <div *ngIf="error" class="error">{{ error }}</div>
-  <div *ngIf="exportError" class="error">{{ exportError }}</div>
-  
-  <div *ngIf="selectedReport" class="report-desc">
-    <h3>报表描述</h3>
-    <p>{{ getChineseReportDescription(selectedReport.name) }}</p>
-    <p class="sql-preview">{{ selectedReport.sql }}</p>
-  </div>
-  
-  <!-- Report data display -->
-  <div *ngIf="reportData && reportData.data" class="result">
-    <h3>查询结果 ({{ reportData.count || reportData.data.length }} 条记录)</h3>
-    
-    <table>
-      <thead>
-        <tr>
-          <th *ngFor="let key of getKeys(reportData.data)">{{ key }}</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr *ngFor="let row of reportData.data">
-          <td *ngFor="let key of getKeys(reportData.data)">{{ row[key] }}</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-  
-  <!-- If no data but reportData exists -->
-  <div *ngIf="reportData && (!reportData.data || reportData.data.length === 0)" class="result" style="background: #fff3cd; padding: 10px;">
-    <h3>空查询结果</h3>
-    <p>报表已执行但未返回数据</p>
+    <div class="pagination-bar" *ngIf="makerRunsTotalPages > 0">
+      <button (click)="previousMakerRunsPage()" [disabled]="makerRunsPage === 0">上一页</button>
+      <span>第 {{ makerRunsPage + 1 }} / {{ makerRunsTotalPages }} 页，共 {{ makerRunsTotalElements }} 条</span>
+      <button (click)="nextMakerRunsPage()" [disabled]="makerRunsPage + 1 >= makerRunsTotalPages">下一页</button>
+    </div>
   </div>
 
   <!-- Checker 视角：待审批报表列表和审批操作 -->
   <div class="section" *ngIf="authService.isLoggedIn() && authService.getCurrentUser()?.role?.includes('CHECKER')">
     <h2>待审批报表</h2>
+    <div class="filter-row">
+      <label>
+        报表名
+        <input [(ngModel)]="checkerRunReportNameFilter" />
+      </label>
+      <label>
+        Maker
+        <input [(ngModel)]="checkerRunMakerFilter" />
+      </label>
+    </div>
     <button (click)="loadCheckerRuns()">刷新列表</button>
     <div *ngIf="checkerError" class="error">{{ checkerError }}</div>
     <div *ngIf="checkerMessage" class="info">{{ checkerMessage }}</div>
@@ -187,6 +192,7 @@
         <p>Maker：{{ selectedCheckerRun.makerUsername }}</p>
         <p>生成时间：{{ selectedCheckerRun.generatedAt | date:'yyyy-MM-dd HH:mm:ss' }}</p>
         <p>提交时间：{{ selectedCheckerRun.submittedAt | date:'yyyy-MM-dd HH:mm:ss' }}</p>
+        <pre class="parameter-preview">参数：{{ formatParameters(selectedCheckerRun.parametersJson) }}</pre>
 
         <label>
           决策：
@@ -254,6 +260,7 @@
           <th>Maker</th>
           <th>Checker</th>
           <th>状态</th>
+          <th>参数</th>
           <th>生成时间</th>
           <th>提交时间</th>
           <th>审批时间</th>
@@ -267,6 +274,7 @@
           <td>{{ r.makerUsername }}</td>
           <td>{{ r.checkerUsername }}</td>
           <td>{{ r.status }}</td>
+          <td><pre class="parameter-preview compact">{{ formatParameters(r.parametersJson) }}</pre></td>
           <td>{{ r.generatedAt | date:'yyyy-MM-dd HH:mm:ss' }}</td>
           <td>{{ r.submittedAt ? (r.submittedAt | date:'yyyy-MM-dd HH:mm:ss') : '-' }}</td>
           <td>{{ r.decidedAt ? (r.decidedAt | date:'yyyy-MM-dd HH:mm:ss') : '-' }}</td>
